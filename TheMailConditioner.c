@@ -83,7 +83,6 @@ struct NetworkVersionOctetItemLoop*QuickGetNetworkPointer(u8*Value,u8 Index,bool
             ResetExpiryWorkBase(&entry->ewb);
             return entry;
         }
-
         struct ExpiryWorkBase*_previous=&entry->ewb;
         Odd=entry->Odd;
         Even=entry->Even;
