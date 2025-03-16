@@ -8,16 +8,14 @@ EXPORT_SYMBOL(IsOdd);
 
 struct NetworkVersionOctetItemLoop{
     SetupEWB;
-    bool IsConnectToRouter:1,IsConnectToPointer:2;
-    u8 Index:5,octet;
+    u8 IsConnectToRouter:1,IsConnectToPointer:2,Index:5,octet;
     struct list_head list; 
     struct list_head Odd[16],Even[16];
     struct mutex OddMutex;
 };
 struct NetworkVersionOctetItemData{
     SetupEWB;
-    bool IsConnectToRouter:1,IsConnectToPointer:2;
-    u8 Index:5,octet;
+    u8 IsConnectToRouter:1,IsConnectToPointer:2,Index:5,octet;
     struct list_head list; 
     struct list_head Odd[16],Even[16];
     struct mutex OddMutex;
@@ -25,8 +23,7 @@ struct NetworkVersionOctetItemData{
 };
 struct NetworkVersionOctetItemData16{
     SetupEWB;
-    bool IsConnectToRouter:1,IsConnectToPointer:2;
-    u8 Index:5,octet;
+    u8 IsConnectToRouter:1,IsConnectToPointer:2,Index:5,octet;
     void *Pointer;
 };
 static struct list_head NetworkVersionOctetOdd[16], NetworkVersionOctetEven[16];
@@ -93,8 +90,9 @@ struct NetworkVersionOctetItemLoop*QuickGetNetworkPointer(u8*Value,u8 Index,bool
 
 struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head*Odd,struct list_head*Even,struct mutex*mutexPrevious,struct mutex*OddmutexPrevious,struct ExpiryWorkBase*Previous,bool IsConnectToRouter){
     while((IsVersion6&&Index<16)||(!IsVersion6&&Index<4)){  
-        struct mutex*mutex=IsOdd(Value[0])?&OddmutexPrevious:mutexPrevious;
-        mutex_lock(mutex);
+        struct mutex **mutex = (IsOdd(Value[0])) ? &OddmutexPrevious : &mutexPrevious;
+
+        mutex_lock(*mutex);
         u8 _value=Value[Index];
         struct list_head*head=IsOdd(_value)?&Odd[WhatGroup(_value)]:&Even[WhatGroup(_value)];
         struct NetworkVersionOctetItemLoop*entry=NULL;
@@ -122,7 +120,7 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
         if(!entry){
             entry=kmalloc(sizeof(struct NetworkVersionOctetItemData),GFP_KERNEL);
             if(!entry){
-                mutex_unlock(mutex);
+                mutex_unlock(*mutex);
                 return NULL;
             }
             entry->octet=_value;
@@ -157,10 +155,10 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
             }
             if(IsVersion6&&Index==15){
                 if(entry->ewb.Invalid){
-                    mutex_unlock(mutex);
+                    mutex_unlock(*mutex);
                     return NULL;
                 }
-                mutex_unlock(mutex);
+                mutex_unlock(*mutex);
                 ResetExpiryWorkBase(&entry->ewb);
                 return entry;
             }else for (u8 i=0;i<16;i++) {
@@ -169,20 +167,21 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
             }
             if(!IsVersion6&&Index==3){
                 if(entry->ewb.Invalid){
-                    mutex_unlock(mutex);
+                    mutex_unlock(*mutex);
                     return NULL;
                 }
-                mutex_unlock(mutex);
+                mutex_unlock(*mutex);
                 ResetExpiryWorkBase(&entry->ewb);
                 return entry;
             }
-            mutex_unlock(mutex);
+            mutex_unlock(*mutex);
         }
         if((IsVersion6&&Index==15)||(!IsVersion6&&Index==3)){
             ResetExpiryWorkBase(&entry->ewb);
+            mutex_unlock(*mutex);
             return entry;
         }
-        mutex_unlock(mutex);
+        mutex_unlock(*mutex);
         struct ExpiryWorkBase*_previous=&entry->ewb;
         mutexPrevious=&entry->ewb.Mutex;
         OddmutexPrevious=&entry->OddMutex;
