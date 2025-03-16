@@ -49,6 +49,49 @@ EXPORT_SYMBOL(WhatGroup);
 static void AutoDeleteNetworkVersionOctetItem(void*){
 
 }
+struct NetworkVersionOctetItemLoop*QuickGetNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head*Odd,struct list_head*Even){
+    while((IsVersion6&&Index<16)||(!IsVersion6&&Index<4)){  
+
+        u8 _value=Value[Index];
+        struct list_head*head=IsOdd(_value)?&Odd[WhatGroup(_value)]:&Even[WhatGroup(_value)];
+        struct NetworkVersionOctetItemLoop*entry=NULL;
+        if (!list_empty(head)){
+            struct NetworkVersionOctetItemLoop*first_entry=list_first_entry(head, struct NetworkVersionOctetItemLoop, list),
+                                            *last_entry=list_last_entry(head, struct NetworkVersionOctetItemLoop, list),*pos;
+            if (_value>=first_entry->octet&&_value<=last_entry->octet)
+            if(_value==first_entry->octet)
+                entry=first_entry;
+            else if(_value==last_entry->octet)
+                entry=last_entry;
+            else if(_value-first_entry->octet<last_entry->octet-_value)
+                list_for_each_entry(pos,head,list)
+                    if(pos->octet==_value){
+                        entry=pos;
+                        break;
+                    }
+            else
+                list_for_each_entry_reverse(pos,head,list)
+                    if(pos->octet==_value){
+                        entry=pos;
+                        break;
+                    }
+        }
+        if(!entry)
+            return NULL;
+        if((IsVersion6&&Index==15)||(!IsVersion6&&Index==3)){
+            if(entry->ewb.Invalid)return NULL;
+            ResetExpiryWorkBase(&entry->ewb);
+            return entry;
+        }
+
+        struct ExpiryWorkBase*_previous=&entry->ewb;
+        Odd=entry->Odd;
+        Even=entry->Even;
+        Index++;
+    }
+    return NULL;
+}
+
 struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head*Odd,struct list_head*Even,struct mutex*mutexPrevious,struct mutex*OddmutexPrevious,struct ExpiryWorkBase*Previous,bool IsConnectToRouter){
     while((IsVersion6&&Index<16)||(!IsVersion6&&Index<4)){  
         struct mutex*mutex=IsOdd(Value[0])?&OddmutexPrevious:mutexPrevious;
@@ -114,6 +157,10 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
                         }
             }
             if(IsVersion6&&Index==15){
+                if(entry->ewb.Invalid){
+                    mutex_unlock(mutex);
+                    return NULL;
+                }
                 mutex_unlock(mutex);
                 ResetExpiryWorkBase(&entry->ewb);
                 return entry;
@@ -122,6 +169,10 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
                 INIT_LIST_HEAD(&entry->Even[i]);
             }
             if(!IsVersion6&&Index==3){
+                if(entry->ewb.Invalid){
+                    mutex_unlock(mutex);
+                    return NULL;
+                }
                 mutex_unlock(mutex);
                 ResetExpiryWorkBase(&entry->ewb);
                 return entry;
@@ -146,10 +197,10 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
 
 
 void*GetGlobelNetworkPointer(u8*Value,bool IsVersion6){
-    return GetNetworkPointer(Value,0,IsVersion6,NetworkVersionOctetOdd,NetworkVersionOctetEven,&NetworkVersionOctetListMutex,&OddNetworkVersionOctetListMutex,NULL,false);
+    return QuickGetNetworkPointer(Value,0,IsVersion6,NetworkVersionOctetOdd,NetworkVersionOctetEven)?:GetNetworkPointer(Value,0,IsVersion6,NetworkVersionOctetOdd,NetworkVersionOctetEven,&NetworkVersionOctetListMutex,&OddNetworkVersionOctetListMutex,NULL,false);
 }
 void*GetNetworkRouterPointer(struct RouterTable*router,u8*Value,bool IsVersion6){
-    return GetNetworkPointer(Value,0,IsVersion6,router->Odd,router->Even,&router->ewb.Mutex,&router->OddMutex,&router->ewb,true);
+    return QuickGetNetworkPointer(Value,0,IsVersion6,router->Odd,router->Even)?:GetNetworkPointer(Value,0,IsVersion6,router->Odd,router->Even,&router->ewb.Mutex,&router->OddMutex,&router->ewb,true);
 }   
 
 
