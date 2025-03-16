@@ -77,7 +77,7 @@ struct NetworkVersionOctetItemLoop*QuickGetNetworkPointer(u8*Value,u8 Index,bool
             return NULL;
         if((IsVersion6&&Index==15)||(!IsVersion6&&Index==3)){
             if(entry->ewb.Invalid)return NULL;
-            ResetExpiryWorkBase(&entry->ewb);
+            BackgroundResetExpiryWorkBase(&entry->ewb);
             return entry;
         }
         struct ExpiryWorkBase*_previous=&entry->ewb;
@@ -128,7 +128,7 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
             entry->IsConnectToRouter=IsConnectToRouter;
             entry->IsConnectToPointer=false;
             mutex_init(&entry->OddMutex);
-            SetupExpiryWorkBase(&entry->ewb,Previous,entry,AutoDeleteNetworkVersionOctetItem);
+            BackgroundResetExpiryWorkBase(&entry->ewb,Previous,entry,AutoDeleteNetworkVersionOctetItem);
             INIT_LIST_HEAD(&entry->list);
             if(list_empty(head))
                 list_add(&entry->list,head);
@@ -159,7 +159,7 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
                     return NULL;
                 }
                 mutex_unlock(*mutex);
-                ResetExpiryWorkBase(&entry->ewb);
+                BackgroundResetExpiryWorkBase(&entry->ewb);
                 return entry;
             }else for (u8 i=0;i<16;i++) {
                 INIT_LIST_HEAD(&entry->Odd[i]);
@@ -171,13 +171,13 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
                     return NULL;
                 }
                 mutex_unlock(*mutex);
-                ResetExpiryWorkBase(&entry->ewb);
+                BackgroundResetExpiryWorkBase(&entry->ewb);
                 return entry;
             }
             mutex_unlock(*mutex);
         }
         if((IsVersion6&&Index==15)||(!IsVersion6&&Index==3)){
-            ResetExpiryWorkBase(&entry->ewb);
+            BackgroundResetExpiryWorkBase(&entry->ewb);
             mutex_unlock(*mutex);
             return entry;
         }
