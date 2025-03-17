@@ -24,7 +24,8 @@ struct RouterTable{
     struct NetworkAdapterTable*nat;
     struct list_head list;
     struct list_head Octets[4][16];
-    struct mutex Mutex[65];
+    struct mutex Mutex[64],Set;
+
     struct list_head Gateways; 
 };
 
@@ -37,10 +38,10 @@ static void AutoDeleteRouter(void*){
 static void AutoDeleteNetwork(void*){
 
 }
-struct NetworkVersionOctetItemData*QuickGetNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[16]){
+struct NetworkVersionOctetItemData*QuickGetNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[4][16]){
     while((IsVersion6&&Index<16)||(!IsVersion6&&Index<4)){  
         u8 _value=Value[Index];
-        struct list_head*head=&octets[(_value&1)+((_value>>5)>7?2:0)][_value>>5];
+        struct list_head*head=octets[(_value&1)+((_value>>5)>7?2:0)][_value>>5];
         struct NetworkVersionOctetItemData*entry=NULL;
         if (!list_empty(head)){
             struct NetworkVersionOctetItemData*first_entry=list_first_entry(head, struct NetworkVersionOctetItemData, list),
@@ -65,13 +66,14 @@ struct NetworkVersionOctetItemData*QuickGetNetworkPointer(u8*Value,u8 Index,bool
             return entry;
         }
         if(Index!=15)
-            head=&entry->Octets;
+            head=(struct list_head*)entry->Octets;
+
         Index++;
     }
     return NULL;
 }
 static DEFINE_MUTEX(StopRaceAddNetworkPointer);
-struct NetworkVersionOctetItemData*AddNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[16],struct mutex(*mutex)[64],struct ExpiryWorkBase*Previous){
+struct NetworkVersionOctetItemData*AddNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[4][16],struct mutex(*mutex)[64],struct ExpiryWorkBase*Previous){
     {
         struct NetworkVersionOctetItemData*entry=QuickGetNetworkPointer(Value,Index,IsVersion6,octets);
         if(entry){
@@ -96,9 +98,9 @@ struct NetworkVersionOctetItemData*AddNetworkPointer(u8*Value,u8 Index,bool IsVe
         u8 _value=Value[Index];
         u8 group=(_value&1)+((_value>>5)>7?2:0);
         u8 slot=_value>>5;
-        struct mutex* lock = &mutex[group*16+slot];
+        struct mutex* lock = mutex[group*16+slot];
         mutex_lock(lock);
-        struct list_head*head=&octets[group][slot];
+        struct list_head*head=octets[group][slot];
         struct NetworkVersionOctetItemData*entry=NULL;
         if (!list_empty(head)){
             struct NetworkVersionOctetItemData*first_entry=list_first_entry(head, struct NetworkVersionOctetItemData, list),
@@ -191,14 +193,14 @@ struct NetworkVersionOctetItemData*AddNetworkPointer(u8*Value,u8 Index,bool IsVe
 
 static DEFINE_MUTEX(ControlGetGlobelNetworkPointer);
 struct NetworkTabel*GetGlobelNetworkPointer(u8*Value,bool IsVersion6){
-    struct NetworkVersionOctetItemData*entry=AddNetworkPointer(Value,0,IsVersion6,GlobelOctet,GlobelMutex,NULL);
+    struct NetworkVersionOctetItemData*entry=AddNetworkPointer(Value,0,IsVersion6,&GlobelOctet,&GlobelMutex,NULL);
     if(!entry||entry->ewb.Invalid)return NULL;
     if(entry->Gateway){
         BackgroundResetExpiryWorkBase(&entry->ewb);
         return entry->Gateway;
     }
     mutex_lock(&ControlGetGlobelNetworkPointer);
-    entry=AddNetworkPointer(Value,0,IsVersion6,GlobelOctet,GlobelMutex,NULL);
+    entry=AddNetworkPointer(Value,0,IsVersion6,&GlobelOctet,&GlobelMutex,NULL);
     if(!entry||entry->ewb.Invalid){
         mutex_unlock(&ControlGetGlobelNetworkPointer);
         return NULL;
@@ -225,27 +227,27 @@ struct NetworkTabel*GetGlobelNetworkPointer(u8*Value,bool IsVersion6){
     return entry->Gateway;
 }
 struct NetworkTabel*GetNetworkRouterPointer(struct RouterTable*router,u8*Value,bool IsVersion6){
-    struct NetworkVersionOctetItemData*entry=AddNetworkPointer(Value,0,IsVersion6,router->Octets,router->Mutex,&router->ewb);
+    struct NetworkVersionOctetItemData*entry=AddNetworkPointer(Value,0,IsVersion6,&router->Octets,&router->Mutex,&router->ewb);
     if(!entry||entry->ewb.Invalid)return NULL;
     if(entry->Gateway){
         BackgroundResetExpiryWorkBase(&entry->ewb);
         return entry->Gateway;
     }
-    mutex_lock(&router->Mutex[64]); 
-    entry=AddNetworkPointer(Value,0,IsVersion6,router->Octets,router->Mutex,&router->ewb);
+    mutex_lock(&router->Set); 
+    entry=AddNetworkPointer(Value,0,IsVersion6,&router->Octets,&router->Mutex,&router->ewb);
     if(!entry||entry->ewb.Invalid){
-        mutex_unlock(&router->Mutex[64]);
+        mutex_unlock(&router->Set);
         return NULL;
     }
     entry->Gateway=kmalloc(sizeof(struct NetworkTabel),GFP_KERNEL);
     if(!entry->Gateway){
-        mutex_unlock(&router->Mutex[64]);
+        mutex_unlock(&router->Set);
         BackgroundResetExpiryWorkBase(&entry->ewb);
         return NULL;
     }
     entry->Gateway->Address=kmalloc(IsVersion6?16:4,GFP_KERNEL);
     if(!entry->Gateway->Address){
-        mutex_unlock(&router->Mutex[64]);
+        mutex_unlock(&router->Set);
         kfree(entry->Gateway);
         BackgroundResetExpiryWorkBase(&entry->ewb);
         return NULL;
@@ -258,7 +260,7 @@ struct NetworkTabel*GetNetworkRouterPointer(struct RouterTable*router,u8*Value,b
     SetupExpiryWorkBase(&entry->Gateway->ewb,&entry->ewb,entry->Gateway,AutoDeleteNetwork);
     list_add(&entry->Gateway->list,&router->Gateways);
     BackgroundResetExpiryWorkBase(&entry->ewb);
-    mutex_unlock(&router->Mutex[64]);
+    mutex_unlock(&router->Set);
     return entry->Gateway;
 }   
 
@@ -286,7 +288,7 @@ struct RouterTable*GetRouter(struct NetworkAdapterTable*nat,u8*MediaAccessContro
 struct RouterTable*AddRouter(struct NetworkAdapterTable*nat,u8*MediaAccessControl){
     struct RouterTable*router=GetRouter(nat,MediaAccessControl);
     if(router)return router;
-    mutext_lock(&nat->ewb.Mutex);
+    mutex_lock(&nat->ewb.Mutex);
     router=GetRouter(nat,MediaAccessControl);
     if(router){
         mutex_unlock(&nat->ewb.Mutex);
@@ -301,7 +303,8 @@ struct RouterTable*AddRouter(struct NetworkAdapterTable*nat,u8*MediaAccessContro
     router->nat=nat;
     INIT_LIST_HEAD(&router->list);
     INIT_LIST_HEAD(&router->Gateways);
-    for(u8 i=0;i<65;i++)
+    mutex_init(&router->Set);
+    for(u8 i=0;i<64;i++)
         mutex_init(&router->Mutex[i]);
     SetupExpiryWorkBase(&router->ewb,&nat->ewb,router,AutoDeleteRouter);
     BackgroundResetExpiryWorkBase(&router->ewb);
