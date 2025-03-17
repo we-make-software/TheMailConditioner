@@ -4,21 +4,21 @@ bool IsOdd(u8 value){
     return value&1;
 }
 EXPORT_SYMBOL(IsOdd);
-
+extern void BackgroundResetExpiryWorkBase(struct ExpiryWorkBase*expiry_work_base);
 
 struct NetworkVersionOctetItemLoop{
     SetupEWB;
     u8 IsConnectToRouter:1,IsConnectToPointer:2,Index:5,octet;
     struct list_head list; 
-    struct list_head Odd[16],Even[16];
-    struct mutex OddMutex;
+    struct list_head Octets[4][16];
+    struct mutex Mutex[4];
 };
 struct NetworkVersionOctetItemData{
     SetupEWB;
     u8 IsConnectToRouter:1,IsConnectToPointer:2,Index:5,octet;
     struct list_head list; 
-    struct list_head Odd[16],Even[16];
-    struct mutex OddMutex;
+    struct list_head Octets[4][16];
+    struct mutex Mutex[4];
     void *Pointer;
 };
 struct NetworkVersionOctetItemData16{
@@ -26,17 +26,15 @@ struct NetworkVersionOctetItemData16{
     u8 IsConnectToRouter:1,IsConnectToPointer:2,Index:5,octet;
     void *Pointer;
 };
-static struct list_head NetworkVersionOctetOdd[16], NetworkVersionOctetEven[16];
-
-static DEFINE_MUTEX(NetworkVersionOctetListMutex);
-static DEFINE_MUTEX(OddNetworkVersionOctetListMutex);
+static struct list_head GlobelOctet[4][16];
+static struct mutex GlobelMutex[4];
 struct RouterTable{
-    struct list_head Odd[16],Even[16];
     u8 MediaAccessControl[6];
     SetupEWB;
     struct NetworkAdapterTable*nat;
     struct list_head list;
-    struct mutex OddMutex;
+    struct list_head Octets[4][16];
+    struct mutex Mutex[4];
 };
 u8 WhatGroup(u8 value);
 u8 WhatGroup(u8 value){
@@ -46,32 +44,25 @@ EXPORT_SYMBOL(WhatGroup);
 static void AutoDeleteNetworkVersionOctetItem(void*){
 
 }
-struct NetworkVersionOctetItemLoop*QuickGetNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head*Odd,struct list_head*Even){
+struct NetworkVersionOctetItemLoop*QuickGetNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[16]){
     while((IsVersion6&&Index<16)||(!IsVersion6&&Index<4)){  
-
         u8 _value=Value[Index];
-        struct list_head*head=IsOdd(_value)?&Odd[WhatGroup(_value)]:&Even[WhatGroup(_value)];
+        struct list_head*head=&octets[(_value&1)+_value>>5>7?1:0][_value>>5];
         struct NetworkVersionOctetItemLoop*entry=NULL;
         if (!list_empty(head)){
             struct NetworkVersionOctetItemLoop*first_entry=list_first_entry(head, struct NetworkVersionOctetItemLoop, list),
                                             *last_entry=list_last_entry(head, struct NetworkVersionOctetItemLoop, list),*pos;
-            if (_value>=first_entry->octet&&_value<=last_entry->octet)
-            if(_value==first_entry->octet)
-                entry=first_entry;
-            else if(_value==last_entry->octet)
-                entry=last_entry;
-            else if(_value-first_entry->octet<last_entry->octet-_value)
-                list_for_each_entry(pos,head,list)
-                    if(pos->octet==_value){
-                        entry=pos;
-                        break;
-                    }
-            else
-                list_for_each_entry_reverse(pos,head,list)
-                    if(pos->octet==_value){
-                        entry=pos;
-                        break;
-                    }
+                if(_value>=first_entry->octet&&_value<=last_entry->octet)
+                    if(_value==first_entry->octet)
+                        entry=first_entry;
+                    else if(_value==last_entry->octet)
+                        entry=last_entry;
+                    else 
+                    list_for_each_entry(pos,head,list)
+                        if(pos->octet==_value){
+                            entry=pos;
+                            break;
+                        }                     
         }
         if(!entry)
             return NULL;
@@ -80,55 +71,64 @@ struct NetworkVersionOctetItemLoop*QuickGetNetworkPointer(u8*Value,u8 Index,bool
             BackgroundResetExpiryWorkBase(&entry->ewb);
             return entry;
         }
-        struct ExpiryWorkBase*_previous=&entry->ewb;
-        Odd=entry->Odd;
-        Even=entry->Even;
+        if(Index!=15)
+            head=&entry->Octets;
         Index++;
     }
     return NULL;
 }
+struct BackgroundInstallList{
+    struct NetworkVersionOctetItemLoop*entry;
+    struct work_struct work;
 
-struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head*Odd,struct list_head*Even,struct mutex*mutexPrevious,struct mutex*OddmutexPrevious,struct ExpiryWorkBase*Previous,bool IsConnectToRouter){
+};
+
+struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[16],struct mutex(*mutex)[4],struct ExpiryWorkBase*Previous,bool IsConnectToRouter){
+    {
+        struct NetworkVersionOctetItemLoop*entry=QuickGetNetworkPointer(Value,Index,IsVersion6,octets);
+        if(entry){
+            if(entry->ewb.Invalid)
+                return NULL;
+            BackgroundResetExpiryWorkBase(&entry->ewb);
+            return entry;
+        }
+    }
     while((IsVersion6&&Index<16)||(!IsVersion6&&Index<4)){  
-        struct mutex **mutex = (IsOdd(Value[0])) ? &OddmutexPrevious : &mutexPrevious;
-
-        mutex_lock(*mutex);
         u8 _value=Value[Index];
-        struct list_head*head=IsOdd(_value)?&Odd[WhatGroup(_value)]:&Even[WhatGroup(_value)];
+        u8 ID=(_value&1)+((_value>>5)>7?1:0);
+        struct mutex*lock=&mutex[ID];
+        mutex_lock(lock);
+        struct list_head*head=&octets[ID][_value>>5];
         struct NetworkVersionOctetItemLoop*entry=NULL;
         if (!list_empty(head)){
             struct NetworkVersionOctetItemLoop*first_entry=list_first_entry(head, struct NetworkVersionOctetItemLoop, list),
-                                            *last_entry=list_last_entry(head, struct NetworkVersionOctetItemLoop, list),*pos;
-            if (_value>=first_entry->octet&&_value<=last_entry->octet)
-            if(_value==first_entry->octet)
-                entry=first_entry;
-            else if(_value==last_entry->octet)
-                entry=last_entry;
-            else if(_value-first_entry->octet<last_entry->octet-_value)
-                list_for_each_entry(pos,head,list)
-                    if(pos->octet==_value){
-                        entry=pos;
-                        break;
-                    }
-            else
-                list_for_each_entry_reverse(pos,head,list)
-                    if(pos->octet==_value){
-                        entry=pos;
-                        break;
-                    }
+                                              *last_entry=list_last_entry(head, struct NetworkVersionOctetItemLoop, list),*pos;
+            if(_value>=first_entry->octet&&_value<=last_entry->octet)
+                if(_value==first_entry->octet)
+                    entry=first_entry;
+                else if(_value==last_entry->octet)entry=last_entry;
+                else 
+                    list_for_each_entry(pos,head,list)
+                        if(pos->octet==_value){
+                            entry=pos;
+                            break;
+                        }                            
         }
+        else
+            INIT_LIST_HEAD(head);
         if(!entry){
             entry=kmalloc(sizeof(struct NetworkVersionOctetItemData),GFP_KERNEL);
             if(!entry){
-                mutex_unlock(*mutex);
+                mutex_unlock(lock);
                 return NULL;
             }
             entry->octet=_value;
             entry->Index=Index;
             entry->IsConnectToRouter=IsConnectToRouter;
             entry->IsConnectToPointer=false;
-            mutex_init(&entry->OddMutex);
-            BackgroundResetExpiryWorkBase(&entry->ewb,Previous,entry,AutoDeleteNetworkVersionOctetItem);
+            for(u8 i=0;i<4;i++)
+                mutex_init(&entry->Mutex[i]);
+            SetupExpiryWorkBase(&entry->ewb,Previous,entry,AutoDeleteNetworkVersionOctetItem);
             INIT_LIST_HEAD(&entry->list);
             if(list_empty(head))
                 list_add(&entry->list,head);
@@ -140,54 +140,41 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
                     list_add(&entry->list,head);
                 else if(_value>last_entry->octet)
                     list_add_tail(&entry->list,head);
-                else if(_value-first_entry->octet<last_entry->octet-_value)
-                    list_for_each_entry(pos,head,list)
-                        if(pos->octet>_value){
-                            list_add_tail(&entry->list,&pos->list);
-                            break;
-                        }
+                else if(_value!=0&&(_value-1)==first_entry->octet)
+                    list_add_tail(&entry->list,&first_entry->list);
                 else
-                    list_for_each_entry_reverse(pos,head,list)
-                        if(pos->octet<_value){
-                            list_add(&entry->list,&pos->list);
-                            break;
-                        }
+                    list_add(&entry->list,&last_entry->list);                                      
             }
             if(IsVersion6&&Index==15){
                 if(entry->ewb.Invalid){
-                    mutex_unlock(*mutex);
+                    mutex_unlock(lock);
                     return NULL;
                 }
-                mutex_unlock(*mutex);
+                mutex_unlock(lock);
                 BackgroundResetExpiryWorkBase(&entry->ewb);
                 return entry;
-            }else for (u8 i=0;i<16;i++) {
-                INIT_LIST_HEAD(&entry->Odd[i]);
-                INIT_LIST_HEAD(&entry->Even[i]);
             }
             if(!IsVersion6&&Index==3){
                 if(entry->ewb.Invalid){
-                    mutex_unlock(*mutex);
+                    mutex_unlock(lock);
                     return NULL;
                 }
-                mutex_unlock(*mutex);
+                mutex_unlock(lock);
                 BackgroundResetExpiryWorkBase(&entry->ewb);
                 return entry;
             }
-            mutex_unlock(*mutex);
+            mutex_unlock(lock);
         }
         if((IsVersion6&&Index==15)||(!IsVersion6&&Index==3)){
             BackgroundResetExpiryWorkBase(&entry->ewb);
-            mutex_unlock(*mutex);
+            mutex_unlock(lock);
             return entry;
         }
-        mutex_unlock(*mutex);
+        mutex_unlock(lock);
         struct ExpiryWorkBase*_previous=&entry->ewb;
-        mutexPrevious=&entry->ewb.Mutex;
-        OddmutexPrevious=&entry->OddMutex;
-        Odd=entry->Odd;
-        Even=entry->Even;
-        Previous=_previous;
+        mutex=&entry->Mutex;
+        octets=&entry->Octets;
+        Previous=&entry->ewb;
         Index++;
     }
     return NULL;
@@ -195,10 +182,11 @@ struct NetworkVersionOctetItemLoop*GetNetworkPointer(u8*Value,u8 Index,bool IsVe
 
 
 void*GetGlobelNetworkPointer(u8*Value,bool IsVersion6){
-    return QuickGetNetworkPointer(Value,0,IsVersion6,NetworkVersionOctetOdd,NetworkVersionOctetEven)?:GetNetworkPointer(Value,0,IsVersion6,NetworkVersionOctetOdd,NetworkVersionOctetEven,&NetworkVersionOctetListMutex,&OddNetworkVersionOctetListMutex,NULL,false);
+    return AddNetworkPointer(Value,0,IsVersion6,GlobelOctet,GlobelMutex,NULL,false);
 }
 void*GetNetworkRouterPointer(struct RouterTable*router,u8*Value,bool IsVersion6){
-    return QuickGetNetworkPointer(Value,0,IsVersion6,router->Odd,router->Even)?:GetNetworkPointer(Value,0,IsVersion6,router->Odd,router->Even,&router->ewb.Mutex,&router->OddMutex,&router->ewb,true);
+    //AddNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[16],struct mutex(*mutex)[4],struct ExpiryWorkBase*Previous,bool IsConnectToRouter){
+    return AddNetworkPointer(Value,0,IsVersion6,router->Octets,router->Mutex,&router->ewb,true);
 }   
 
 
@@ -219,18 +207,17 @@ EXPORT_SYMBOL(TheMailConditionerPacketWorkHandler);
 
 static void Closing(void){
     struct NetworkVersionOctetItemLoop *entry, *tmp;
-    for (u8 i=0;i<16;i++) {
-        list_for_each_entry_safe(entry,tmp,&NetworkVersionOctetOdd[i],Odd[i]) 
-            CancelExpiryWorkBase(&entry->ewb);
-        list_for_each_entry_safe(entry,tmp,&NetworkVersionOctetEven[i],Even[i])
-            CancelExpiryWorkBase(&entry->ewb);
+    for (u8 i=0;i<4;i++) {
+        mutex_lock(&GlobelMutex[i]);
+        for(u8 j=0;j<16;j++)
+            list_for_each_entry_safe(entry, tmp, &GlobelOctet[i][j], list)
+                CancelExpiryWorkBase(&entry->ewb);
+        mutex_unlock(&GlobelMutex[i]);
     }
 }
 static void Starting(void){
-    for (u8 i=0;i<16;i++) {
-        INIT_LIST_HEAD(&NetworkVersionOctetOdd[i]);
-        INIT_LIST_HEAD(&NetworkVersionOctetEven[i]);
-    }
+    for (u8 i=0;i<16;i++)
+    mutex_init(&GlobelMutex[i]);
 }
 Setup("The Mail Conditioner",Starting(),Closing())
 
