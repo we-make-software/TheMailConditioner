@@ -25,7 +25,6 @@ struct RouterTable{
     struct list_head list;
     struct list_head Octets[4][16];
     struct mutex Mutex[64],Set;
-
     struct list_head Gateways; 
 };
 
@@ -315,19 +314,21 @@ struct RouterTable*AddRouter(struct NetworkAdapterTable*nat,u8*MediaAccessContro
 void TheMailConditionerPacketWorkHandler(struct NetworkAdapterTable*,struct PacketConversion*);
 void TheMailConditionerPacketWorkHandler(struct NetworkAdapterTable*nta,struct PacketConversion*pc){
     struct RouterTable*router=AddRouter(nta,pc->data);
+    printk(KERN_INFO "RouterTable pointer: %p\n", router);
     if(!router)return;
+    /*
     pc->data+=2;
     pc->Server=GetGlobelNetworkPointer(pc->data+(pc->IsVersion6?8:12),pc->IsVersion6);
     if(!pc->Server||pc->Server->IsBlocked)return;
     pc->Client=GetNetworkRouterPointer(router,pc->data+(pc->IsVersion6?8:12),pc->IsVersion6);
     if(!pc->Client||pc->Client->IsBlocked)return;
-    //here it will go to other project else to many lines in this project
+    */
 }
 EXPORT_SYMBOL(TheMailConditionerPacketWorkHandler);
 
 static void Closing(void){
     struct NetworkVersionOctetItemData*entry,*tmp;
-    for (u8 i=0; i<64; i++) {
+    for (u8 i=0;i<64;i++) {
         mutex_lock(&GlobelMutex[i]);
         list_for_each_entry_safe(entry,tmp,&GlobelOctet[i/16][i%16],list)
             CancelExpiryWorkBase(&entry->ewb);
