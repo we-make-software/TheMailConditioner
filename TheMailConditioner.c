@@ -7,14 +7,14 @@ struct NetworkVersionOctetItemLoop{
     u8 IsConnectToRouter:1,IsConnectToPointer:2,Index:5,octet;
     struct list_head list; 
     struct list_head Octets[4][16];
-    struct mutex Mutex[16];
+    struct mutex Mutex[64];
 };
 struct NetworkVersionOctetItemData{
     SetupEWB;
     u8 IsConnectToRouter:1,IsConnectToPointer:2,Index:5,octet;
     struct list_head list; 
     struct list_head Octets[4][16];
-    struct mutex Mutex[16];
+    struct mutex Mutex[64];
     void *Pointer;
 };
 struct NetworkVersionOctetItemData16{
@@ -23,14 +23,14 @@ struct NetworkVersionOctetItemData16{
     void *Pointer;
 };
 static struct list_head GlobelOctet[4][16];
-static struct mutex GlobelMutex[16];
+static struct mutex GlobelMutex[64];
 struct RouterTable{
     u8 MediaAccessControl[6];
     SetupEWB;
     struct NetworkAdapterTable*nat;
     struct list_head list;
     struct list_head Octets[4][16];
-    struct mutex Mutex[16];
+    struct mutex Mutex[64];
 };
 
 static void AutoDeleteNetworkVersionOctetItem(void*){
@@ -39,7 +39,7 @@ static void AutoDeleteNetworkVersionOctetItem(void*){
 struct NetworkVersionOctetItemLoop*QuickGetNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[16]){
     while((IsVersion6&&Index<16)||(!IsVersion6&&Index<4)){  
         u8 _value=Value[Index];
-        struct list_head*head=&octets[(_value&1)+_value>>5>7?1:0][_value>>5];
+        struct list_head*head=&octets[(_value&1)+((_value>>5)>7?2:0)][_value>>5];
         struct NetworkVersionOctetItemLoop*entry=NULL;
         if (!list_empty(head)){
             struct NetworkVersionOctetItemLoop*first_entry=list_first_entry(head, struct NetworkVersionOctetItemLoop, list),
@@ -75,7 +75,7 @@ struct BackgroundInstallList{
 
 };
 static DEFINE_MUTEX(StopRaceAddNetworkPointer);
-struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[16],struct mutex(*mutex)[4],struct ExpiryWorkBase*Previous,bool IsConnectToRouter){
+struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[16],struct mutex(*mutex)[64],struct ExpiryWorkBase*Previous,bool IsConnectToRouter){
     {
         struct NetworkVersionOctetItemLoop*entry=QuickGetNetworkPointer(Value,Index,IsVersion6,octets);
         if(entry){
@@ -89,11 +89,8 @@ struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVe
     {
         struct NetworkVersionOctetItemLoop*entry=QuickGetNetworkPointer(Value,Index,IsVersion6,octets);
         if(entry){
-            if(entry->ewb.Invalid){
-                mutex_unlock(&StopRaceAddNetworkPointer);   
-                return NULL;
-            }
-            mutex_unlock(&StopRaceAddNetworkPointer);
+            mutex_unlock(&StopRaceAddNetworkPointer);  
+            if(entry->ewb.Invalid)return NULL;
             BackgroundResetExpiryWorkBase(&entry->ewb);
             return entry;
         }
@@ -101,9 +98,11 @@ struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVe
     bool LocalStopRaceAddNetworkPointer=true;
     while((IsVersion6&&Index<16)||(!IsVersion6&&Index<4)){  
         u8 _value=Value[Index];
-        struct mutex*lock=&mutex[(_value>>5)];
+        u8 group=(_value&1)+((_value>>5)>7?2:0);
+        u8 slot=_value>>5;
+        struct mutex* lock = &mutex[group*16+slot];
         mutex_lock(lock);
-        struct list_head*head=&octets[(_value&1)+((_value>>5)>7?1:0)][_value>>5];
+        struct list_head*head=&octets[group][slot];
         struct NetworkVersionOctetItemLoop*entry=NULL;
         if (!list_empty(head)){
             struct NetworkVersionOctetItemLoop*first_entry=list_first_entry(head, struct NetworkVersionOctetItemLoop, list),
@@ -125,13 +124,15 @@ struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVe
             entry=kmalloc(sizeof(struct NetworkVersionOctetItemData),GFP_KERNEL);
             if(!entry){
                 mutex_unlock(lock);
+                if(LocalStopRaceAddNetworkPointer)
+                mutex_unlock(&StopRaceAddNetworkPointer);
                 return NULL;
             }
             entry->octet=_value;
             entry->Index=Index;
             entry->IsConnectToRouter=IsConnectToRouter;
             entry->IsConnectToPointer=false;
-            for(u8 i=0;i<4;i++)
+            for(u8 i=0;i<64;i++)
                 mutex_init(&entry->Mutex[i]);
             SetupExpiryWorkBase(&entry->ewb,Previous,entry,AutoDeleteNetworkVersionOctetItem);
             INIT_LIST_HEAD(&entry->list);
@@ -149,6 +150,10 @@ struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVe
                     list_add_tail(&entry->list,&first_entry->list);
                 else
                     list_add(&entry->list,&last_entry->list);                                      
+            }
+            if(LocalStopRaceAddNetworkPointer){
+                LocalStopRaceAddNetworkPointer=false;
+                mutex_unlock(&StopRaceAddNetworkPointer);
             }
             if(IsVersion6&&Index==15){
                 if(entry->ewb.Invalid){
@@ -176,15 +181,14 @@ struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVe
             return entry;
         }
         mutex_unlock(lock);
-        struct ExpiryWorkBase*_previous=&entry->ewb;
-        mutex=&entry->Mutex;
-        octets=&entry->Octets;
-        Previous=&entry->ewb;
-        Index++;
         if(LocalStopRaceAddNetworkPointer){
             LocalStopRaceAddNetworkPointer=false;
             mutex_unlock(&StopRaceAddNetworkPointer);
         }
+        mutex=&entry->Mutex;
+        octets=&entry->Octets;
+        Previous=&entry->ewb;
+        Index++;
     }
     return NULL;
 }
@@ -215,17 +219,16 @@ void TheMailConditionerPacketWorkHandler(struct NetworkAdapterTable*nta,struct P
 EXPORT_SYMBOL(TheMailConditionerPacketWorkHandler);
 
 static void Closing(void){
-    struct NetworkVersionOctetItemLoop *entry, *tmp;
-    for (u8 i=0;i<16;i++) {
+    struct NetworkVersionOctetItemLoop*entry,*tmp;
+    for (u8 i=0; i<64; i++) {
         mutex_lock(&GlobelMutex[i]);
-        for(u8 j=0;j<16;j++)
-            list_for_each_entry_safe(entry, tmp, &GlobelOctet[i][j], list)
-                CancelExpiryWorkBase(&entry->ewb);
+        list_for_each_entry_safe(entry,tmp,&GlobelOctet[i/16][i%16],list)
+            CancelExpiryWorkBase(&entry->ewb);
         mutex_unlock(&GlobelMutex[i]);
     }
 }
 static void Starting(void){
-    for (u8 i=0;i<16;i++)
+    for (u8 i=0;i<64;i++)
         mutex_init(&GlobelMutex[i]);
 }
 Setup("The Mail Conditioner",Starting(),Closing())
