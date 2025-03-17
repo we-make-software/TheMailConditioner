@@ -7,14 +7,14 @@ struct NetworkVersionOctetItemLoop{
     u8 IsConnectToRouter:1,IsConnectToPointer:2,Index:5,octet;
     struct list_head list; 
     struct list_head Octets[4][16];
-    struct mutex Mutex[4];
+    struct mutex Mutex[16];
 };
 struct NetworkVersionOctetItemData{
     SetupEWB;
     u8 IsConnectToRouter:1,IsConnectToPointer:2,Index:5,octet;
     struct list_head list; 
     struct list_head Octets[4][16];
-    struct mutex Mutex[4];
+    struct mutex Mutex[16];
     void *Pointer;
 };
 struct NetworkVersionOctetItemData16{
@@ -23,20 +23,16 @@ struct NetworkVersionOctetItemData16{
     void *Pointer;
 };
 static struct list_head GlobelOctet[4][16];
-static struct mutex GlobelMutex[4];
+static struct mutex GlobelMutex[16];
 struct RouterTable{
     u8 MediaAccessControl[6];
     SetupEWB;
     struct NetworkAdapterTable*nat;
     struct list_head list;
     struct list_head Octets[4][16];
-    struct mutex Mutex[4];
+    struct mutex Mutex[16];
 };
-u8 WhatGroup(u8 value);
-u8 WhatGroup(u8 value){
-    return value >> 5;
-}
-EXPORT_SYMBOL(WhatGroup);
+
 static void AutoDeleteNetworkVersionOctetItem(void*){
 
 }
@@ -91,10 +87,9 @@ struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVe
     }
     while((IsVersion6&&Index<16)||(!IsVersion6&&Index<4)){  
         u8 _value=Value[Index];
-        u8 ID=(_value&1)+((_value>>5)>7?1:0);
-        struct mutex*lock=&mutex[ID];
+        struct mutex*lock=&mutex[(_value>>5)];
         mutex_lock(lock);
-        struct list_head*head=&octets[ID][_value>>5];
+        struct list_head*head=&octets[(_value&1)+((_value>>5)>7?1:0)][_value>>5];
         struct NetworkVersionOctetItemLoop*entry=NULL;
         if (!list_empty(head)){
             struct NetworkVersionOctetItemLoop*first_entry=list_first_entry(head, struct NetworkVersionOctetItemLoop, list),
@@ -203,7 +198,7 @@ EXPORT_SYMBOL(TheMailConditionerPacketWorkHandler);
 
 static void Closing(void){
     struct NetworkVersionOctetItemLoop *entry, *tmp;
-    for (u8 i=0;i<4;i++) {
+    for (u8 i=0;i<16;i++) {
         mutex_lock(&GlobelMutex[i]);
         for(u8 j=0;j<16;j++)
             list_for_each_entry_safe(entry, tmp, &GlobelOctet[i][j], list)
@@ -213,7 +208,7 @@ static void Closing(void){
 }
 static void Starting(void){
     for (u8 i=0;i<16;i++)
-    mutex_init(&GlobelMutex[i]);
+        mutex_init(&GlobelMutex[i]);
 }
 Setup("The Mail Conditioner",Starting(),Closing())
 
