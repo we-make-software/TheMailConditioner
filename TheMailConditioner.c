@@ -1,9 +1,5 @@
 #include "../ExpiryWorkBase/ExpiryWorkBase.h"
 
-bool IsOdd(u8 value){
-    return value&1;
-}
-EXPORT_SYMBOL(IsOdd);
 extern void BackgroundResetExpiryWorkBase(struct ExpiryWorkBase*expiry_work_base);
 
 struct NetworkVersionOctetItemLoop{
