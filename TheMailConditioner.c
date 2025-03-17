@@ -74,7 +74,7 @@ struct BackgroundInstallList{
     struct work_struct work;
 
 };
-
+static DEFINE_MUTEX(StopRaceAddNetworkPointer);
 struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVersion6,struct list_head(*octets)[16],struct mutex(*mutex)[4],struct ExpiryWorkBase*Previous,bool IsConnectToRouter){
     {
         struct NetworkVersionOctetItemLoop*entry=QuickGetNetworkPointer(Value,Index,IsVersion6,octets);
@@ -85,6 +85,20 @@ struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVe
             return entry;
         }
     }
+    mutex_lock(&StopRaceAddNetworkPointer);
+    {
+        struct NetworkVersionOctetItemLoop*entry=QuickGetNetworkPointer(Value,Index,IsVersion6,octets);
+        if(entry){
+            if(entry->ewb.Invalid){
+                mutex_unlock(&StopRaceAddNetworkPointer);   
+                return NULL;
+            }
+            mutex_unlock(&StopRaceAddNetworkPointer);
+            BackgroundResetExpiryWorkBase(&entry->ewb);
+            return entry;
+        }
+    }
+    bool LocalStopRaceAddNetworkPointer=true;
     while((IsVersion6&&Index<16)||(!IsVersion6&&Index<4)){  
         u8 _value=Value[Index];
         struct mutex*lock=&mutex[(_value>>5)];
@@ -167,6 +181,10 @@ struct NetworkVersionOctetItemLoop*AddNetworkPointer(u8*Value,u8 Index,bool IsVe
         octets=&entry->Octets;
         Previous=&entry->ewb;
         Index++;
+        if(LocalStopRaceAddNetworkPointer){
+            LocalStopRaceAddNetworkPointer=false;
+            mutex_unlock(&StopRaceAddNetworkPointer);
+        }
     }
     return NULL;
 }
