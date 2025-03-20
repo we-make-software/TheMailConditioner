@@ -10,8 +10,6 @@ obj-m := TheMailConditioner.o
 all:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 
-
-
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
 
@@ -34,3 +32,9 @@ commit:
 	fi
 pull:
 	git pull origin main --rebase
+
+build:
+	@cd /root/we-make-software.com && $(MAKE)
+
+unbuild: 
+	@cd /root/we-make-software.com && $(MAKE) stop
