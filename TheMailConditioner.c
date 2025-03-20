@@ -80,8 +80,8 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
                         goto next;
                     }
         if(!set)return NULL;
+        cond_resched();
         mutex_lock(firstMagic);
-        firstList=&lastBind[group][slot];
         list_for_each_entry_safe(connection,tmp,firstList,list)
             if(connection->octet==octet&&GetExpiryWorkBaseParent(connection->ewb)){
                 mutex_unlock(firstMagic);
@@ -105,12 +105,12 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
                 INIT_LIST_HEAD(&connection->bind[g][s]);
         INIT_LIST_HEAD(&connection->list);
         connection->octet=octet;
-        list_add(&connection->list,firstList);
+        list_add_tail(&connection->list,firstList);
         mutex_unlock(firstMagic);
         if(i==size-1)return connection;
     next:
         lastBind=connection->bind;
-        lastMagic=connection->magic;
+        lastMagic=connection->magic;  
     } 
     return NULL;
 }
