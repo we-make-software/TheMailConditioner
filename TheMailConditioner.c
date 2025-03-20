@@ -73,16 +73,10 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
         slot=octet>>5;
         firstMagic=&lastMagic[octet];
         firstList=&lastBind[group][slot];
-        if (!list_empty(firstList)) {
-            struct TheMailConditioner *firstEntry = list_first_entry(firstList, struct TheMailConditioner, list);
-            printk(KERN_INFO "List is NOT empty for octet %d: First entry octet: %d at %p\n", 
-                   octet, firstEntry->octet, firstEntry);
-        }
         if(!list_empty(firstList))
             list_for_each_entry_safe(connection,tmp,firstList,list)
                     if(connection->octet==octet&&GetExpiryWorkBaseParent(connection->ewb)){
                         if(i==(size-1))return connection;
-                        printk(KERN_INFO "Found: %d\n",octet);
                         goto next;
                     }
         if(!set)return NULL;
@@ -94,16 +88,12 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
                 if(i==(size-1))return connection;
                 goto next;
             }
- 
-        printk(KERN_INFO "Not found: %d\n",octet);            
         connection=kmem_cache_alloc(tmccache,GFP_KERNEL);
         if(!connection){
-            printk(KERN_INFO "Failed to allocate memory\n");
             mutex_unlock(firstMagic);
             return NULL;
         }
         if(!SetupExpiryWorkBase(&connection->ewb,(i==0)?NULL:list_first_entry(firstList,struct TheMailConditioner,list)->ewb,connection,AutoDeleteData)){
-            printk(KERN_INFO "Failed to setup expiry work base\n");
             kmem_cache_free(tmccache,connection);
             mutex_unlock(firstMagic);
             return NULL;
@@ -115,9 +105,6 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
                 INIT_LIST_HEAD(&connection->bind[g][s]);
         INIT_LIST_HEAD(&connection->list);
         connection->octet=octet;
-        struct TheMailConditioner *firstEntry = list_first_entry(firstList, struct TheMailConditioner, list);
-        printk(KERN_INFO "List is NOT empty for octet %d: Add entry octet: %d at %p\n", 
-               octet, firstEntry->octet, firstEntry);
         list_add(&connection->list,firstList);
         mutex_unlock(firstMagic);
         if(i==size-1)return connection;
