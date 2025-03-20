@@ -33,8 +33,3 @@ commit:
 pull:
 	git pull origin main --rebase
 
-build:
-	@cd /root/we-make-software.com && $(MAKE)
-
-unbuild: 
-	@cd /root/we-make-software.com && $(MAKE) stop
