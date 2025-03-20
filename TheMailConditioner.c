@@ -13,7 +13,7 @@ static struct TheMailConditioner*GetPrev(struct ExpiryWorkBase*ewb){
 }
 static struct mutex Magic[255];
 static struct list_head Bind[4][16];
-static struct kmem_cache*tmccache;
+
 void CancelTheMailConditioner(struct TheMailConditioner*);
 void CancelTheMailConditioner(struct TheMailConditioner*tmc){
     if(!tmc)return;
@@ -27,7 +27,7 @@ void CancelTheMailConditioner(struct TheMailConditioner*tmc){
     void *tempData = tmc->data;
     CancelExpiryWorkBase(tmc->ewb);
     UnlockExpiryWorkBase(tmc->ewb);
-    kmem_cache_free(tmccache,tmc);
+    kfree(tmc);
     if(tempData)kfree(tempData);
 }
 EXPORT_SYMBOL(CancelTheMailConditioner);
@@ -37,24 +37,24 @@ static void AutoDeleteData(void* data) {
     if(!tmc)return;
     void*tempData=tmc->data;
     if(tmc->bindDelete)tmc->bindDelete(tempData,TheBenchmarksExpiryWorkBase(tmc->ewb,false,false));
-    kmem_cache_free(tmccache,tmc);
+    kfree(tmc);
     if(tempData)kfree(tempData);
 }
 bool SetAutoDeleteTheMailConditioner(struct TheMailConditioner*,void(*)(void*,struct ExpiryWorkBaseBenchmark));
 bool SetAutoDeleteTheMailConditioner(struct TheMailConditioner*tmc,void(*bindDelete)(void*,struct ExpiryWorkBaseBenchmark)){
-    if(!GetExpiryWorkBaseParent(tmc->ewb))return false;
+    if(IsStoppingExpiryWorkBaseFalse()||!GetExpiryWorkBaseParent(tmc->ewb))return false;
     tmc->bindDelete=bindDelete;
     return true;
 }
 EXPORT_SYMBOL(SetAutoDeleteTheMailConditioner);
 void*GetTheMailConditionerData(struct TheMailConditioner*);
 void*GetTheMailConditionerData(struct TheMailConditioner*tmc){
-    return GetExpiryWorkBaseParent(tmc->ewb)?tmc->data:NULL;
+    return IsStoppingExpiryWorkBaseFalse()&&GetExpiryWorkBaseParent(tmc->ewb)?tmc->data:NULL;
 }
 EXPORT_SYMBOL(GetTheMailConditionerData);
 bool SetTheMailConditionerData(struct TheMailConditioner*,void*);
 bool SetTheMailConditionerData(struct TheMailConditioner*tmc,void*data){
-    if(!GetExpiryWorkBaseParent(tmc->ewb))return false;
+    if(IsStoppingExpiryWorkBaseFalse()||!GetExpiryWorkBaseParent(tmc->ewb))return false;
     tmc->data=data;
     return true;
 }
@@ -63,10 +63,11 @@ EXPORT_SYMBOL(SetTheMailConditionerData);
 
 struct TheMailConditioner*GetTheMailConditioner(u8*,u8,bool);
 struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
+    if(!IsStoppingExpiryWorkBaseFalse())return NULL;
     struct mutex*lastMagic=Magic,*firstMagic=NULL;
     struct list_head(*lastBind)[16]=Bind,*firstList=NULL;
     struct TheMailConditioner*connection=NULL,*tmp=NULL;
-    u8 octet,group,slot;
+    u8 octet=0,group=0,slot=0;
     for(u8 i=0;i<size;i++){
         octet=value[i];
         group=(octet&1)+((octet>>5)>7?2:0);
@@ -80,7 +81,6 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
                         goto next;
                     }
         if(!set)return NULL;
-        cond_resched();
         mutex_lock(firstMagic);
         list_for_each_entry_safe(connection,tmp,firstList,list)
             if(connection->octet==octet&&GetExpiryWorkBaseParent(connection->ewb)){
@@ -88,13 +88,13 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
                 if(i==(size-1))return connection;
                 goto next;
             }
-        connection=kmem_cache_alloc(tmccache,GFP_KERNEL);
+        connection=kmalloc(sizeof(struct TheMailConditioner),GFP_KERNEL);
         if(!connection){
             mutex_unlock(firstMagic);
             return NULL;
         }
         if(!SetupExpiryWorkBase(&connection->ewb,(i==0)?NULL:list_first_entry(firstList,struct TheMailConditioner,list)->ewb,connection,AutoDeleteData)){
-            kmem_cache_free(tmccache,connection);
+            kfree(connection);
             mutex_unlock(firstMagic);
             return NULL;
         }
@@ -105,12 +105,13 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
                 INIT_LIST_HEAD(&connection->bind[g][s]);
         INIT_LIST_HEAD(&connection->list);
         connection->octet=octet;
-        list_add_tail(&connection->list,firstList);
+        list_add(&connection->list,firstList);
         mutex_unlock(firstMagic);
         if(i==size-1)return connection;
     next:
         lastBind=connection->bind;
-        lastMagic=connection->magic;  
+        lastMagic=connection->magic; 
+        connection=tmp=NULL; 
     } 
     return NULL;
 }
@@ -118,10 +119,9 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
 EXPORT_SYMBOL(GetTheMailConditioner);
 
 static void Layer1End(void){
-   kmem_cache_destroy(tmccache);
+
 }
 static void Layer0Start(void){
-    tmccache=kmem_cache_create("tmccache", sizeof(struct TheMailConditioner),0, SLAB_HWCACHE_ALIGN,NULL);
     for(u8 i=0;i<255;i++)
         mutex_init(&Magic[i]);
     for(u8 i=0;i<4;i++)
