@@ -18,7 +18,7 @@
     </td>
     <td>
       <strong>Role:</strong> ExpiryWorkBase 🛠️ <br>
-      I just sent a notification to AutoDeleteData.
+      I just sent a notification to TheMailConditioner.
     </td>
   </tr>
   <tr style="border: none;">
