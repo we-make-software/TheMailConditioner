@@ -7,7 +7,7 @@
            style="border: 3px solid black; border-radius: 10px; padding: 5px;">
     </td>
     <td>
-      <strong>Role:</strong> TheRequirements 🛠️ <br>
+      <strong>Role:</strong> TheRequirements <br>
       This follows TheRequirements 0.1, and we allow the last to have its own delete function.
     </td>
   </tr>
