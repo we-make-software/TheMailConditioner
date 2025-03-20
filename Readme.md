@@ -17,7 +17,7 @@
            style="border: 3px solid black; border-radius: 10px; padding: 5px;">
     </td>
     <td>
-      <strong>Role:</strong> ExpiryWorkBase 🛠️ <br>
+      <strong>Role:</strong> ExpiryWorkBase<br>
       I just sent a notification to TheMailConditioner.
     </td>
   </tr>
@@ -27,7 +27,7 @@
            style="border: 3px solid black; border-radius: 10px; padding: 5px;">
     </td>
     <td>
-      <strong>Role:</strong> TheMailConditioner 🛠️ <br>
+      <strong>Role:</strong> TheMailConditioner<br>
        I have established rules for lookups to help find objects faster.
     </td>
   </tr>
