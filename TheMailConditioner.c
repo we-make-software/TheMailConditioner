@@ -1,4 +1,4 @@
-#include "../ExpiryWorkBase/ExpiryWorkBase.h"
+#include "../TheMailConditioner/TheMailConditioner.h"
 struct TheMailConditioner{
     SetupEWB;
     u8 octet;
@@ -13,7 +13,6 @@ static struct TheMailConditioner*GetPrev(struct ExpiryWorkBase*ewb){
 }
 static struct mutex Magic[255];
 static struct list_head Bind[4][16];
-void CancelTheMailConditioner(struct TheMailConditioner*);
 void CancelTheMailConditioner(struct TheMailConditioner*tmc){
     if(!tmc)return;
     if(!LockExpiryWorkBase(tmc->ewb)||!GetExpiryWorkBaseParent(tmc->ewb))return;
@@ -30,8 +29,8 @@ void CancelTheMailConditioner(struct TheMailConditioner*tmc){
     if(tempData)kfree(tempData);
 }
 EXPORT_SYMBOL(CancelTheMailConditioner);
-static void AutoDeleteData(void*);
-static void AutoDeleteData(void* data) {
+static void AutoDeleteData(void*,struct ExpiryWorkBaseBenchmark);
+static void AutoDeleteData(void* data,struct ExpiryWorkBaseBenchmark) {
     struct TheMailConditioner*tmc=(struct TheMailConditioner*)data;
     if(!tmc)return;
     void*tempData=tmc->data;
@@ -40,26 +39,22 @@ static void AutoDeleteData(void* data) {
     kfree(tmc);
     if(tempData)kfree(tempData);
 }
-bool SetAutoDeleteTheMailConditioner(struct TheMailConditioner*,void(*)(void*,struct ExpiryWorkBaseBenchmark));
 bool SetAutoDeleteTheMailConditioner(struct TheMailConditioner*tmc,void(*bindDelete)(void*,struct ExpiryWorkBaseBenchmark)){
     if(IsStoppingExpiryWorkBaseFalse()||!GetExpiryWorkBaseParent(tmc->ewb))return false;
     tmc->bindDelete=bindDelete;
     return true;
 }
 EXPORT_SYMBOL(SetAutoDeleteTheMailConditioner);
-void*GetTheMailConditionerData(struct TheMailConditioner*);
 void*GetTheMailConditionerData(struct TheMailConditioner*tmc){
     return IsStoppingExpiryWorkBaseFalse()&&GetExpiryWorkBaseParent(tmc->ewb)?tmc->data:NULL;
 }
 EXPORT_SYMBOL(GetTheMailConditionerData);
-bool SetTheMailConditionerData(struct TheMailConditioner*,void*);
 bool SetTheMailConditionerData(struct TheMailConditioner*tmc,void*data){
     if(IsStoppingExpiryWorkBaseFalse()||!GetExpiryWorkBaseParent(tmc->ewb))return false;
     tmc->data=data;
     return true;
 }
 EXPORT_SYMBOL(SetTheMailConditionerData);
-struct TheMailConditioner*GetTheMailConditioner(u8*,u8,bool);
 struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
     if(!IsStoppingExpiryWorkBaseFalse())return NULL;
     struct mutex*lastMagic=Magic,*firstMagic=NULL;

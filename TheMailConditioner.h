@@ -6,5 +6,6 @@ extern struct TheMailConditioner*GetTheMailConditioner(u8*,u8,bool);
 extern bool SetAutoDeleteTheMailConditioner(struct TheMailConditioner*,void(*)(void*,struct ExpiryWorkBaseBenchmark));
 extern void*GetTheMailConditionerData(struct TheMailConditioner*);
 extern bool SetTheMailConditionerData(struct TheMailConditioner*,void*);
+extern void CancelTheMailConditioner(struct TheMailConditioner*);
 #define SetupTMC struct TheMailConditioner*tmc
 #endif
