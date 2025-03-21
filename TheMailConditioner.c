@@ -109,9 +109,7 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
     return NULL;
 }
 EXPORT_SYMBOL(GetTheMailConditioner);
-static void End(void){
-
-}
+static void End(void){}
 static void Start(void){
     for(u8 i=0;i<255;i++)
         mutex_init(&Magic[i]);
