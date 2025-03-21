@@ -13,7 +13,6 @@ static struct TheMailConditioner*GetPrev(struct ExpiryWorkBase*ewb){
 }
 static struct mutex Magic[255];
 static struct list_head Bind[4][16];
-
 void CancelTheMailConditioner(struct TheMailConditioner*);
 void CancelTheMailConditioner(struct TheMailConditioner*tmc){
     if(!tmc)return;
@@ -60,8 +59,6 @@ bool SetTheMailConditionerData(struct TheMailConditioner*tmc,void*data){
     return true;
 }
 EXPORT_SYMBOL(SetTheMailConditionerData);
-
-
 struct TheMailConditioner*GetTheMailConditioner(u8*,u8,bool);
 struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
     if(!IsStoppingExpiryWorkBaseFalse())return NULL;
@@ -116,9 +113,7 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
     } 
     return NULL;
 }
-
 EXPORT_SYMBOL(GetTheMailConditioner);
-
 static void End(void){
 
 }
