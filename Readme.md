@@ -1,4 +1,4 @@
-### **TheRequirements 0.0**
+### **TheRequirements**
 
 <table style="border-collapse: collapse; border: none;">
   <tr style="border: none;">
@@ -7,8 +7,7 @@
            style="border: 3px solid black; border-radius: 10px; padding: 5px;">
     </td>
     <td>
-      <strong>Role:</strong> TheRequirements<br>
-      Use TheRequirements 0.1.
+      <strong>Role:</strong> TheRequirements
     </td>
   </tr>
   <tr style="border: none;">
@@ -17,8 +16,7 @@
            style="border: 3px solid black; border-radius: 10px; padding: 5px;">
     </td>
     <td>
-      <strong>Role:</strong> ExpiryWorkBase<br>
-      I just sent a notification to TheMailConditioner.
+      <strong>Role:</strong> ExpiryWorkBase
     </td>
   </tr>
   <tr style="border: none;">
@@ -27,8 +25,7 @@
            style="border: 3px solid black; border-radius: 10px; padding: 5px;">
     </td>
     <td>
-      <strong>Role:</strong> TheMailConditioner<br>
-       I have established rules for lookups to help find objects faster.
+      <strong>Role:</strong> TheMailConditioner
     </td>
   </tr>
 </table>
