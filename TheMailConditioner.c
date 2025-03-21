@@ -1,4 +1,4 @@
-#include "../TheRequirements_0_1/TheRequirements.h"
+#include "../ExpiryWorkBase/ExpiryWorkBase.h"
 struct TheMailConditioner{
     SetupEWB;
     u8 octet;
@@ -118,14 +118,14 @@ struct TheMailConditioner*GetTheMailConditioner(u8*value,u8 size,bool set){
 
 EXPORT_SYMBOL(GetTheMailConditioner);
 
-static void Layer1End(void){
+static void End(void){
 
 }
-static void Layer0Start(void){
+static void Start(void){
     for(u8 i=0;i<255;i++)
         mutex_init(&Magic[i]);
     for(u8 i=0;i<4;i++)
         for(u8 j=0;j<16;j++)
         INIT_LIST_HEAD(&Bind[i][j]);
 }
-Layer0_1Setup("TheMailConditioner",0,0)
+Setup("TheMailConditioner",0,0)
